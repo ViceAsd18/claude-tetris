@@ -42,6 +42,7 @@ Es una versión jugable del Tetris clásico con todas las mecánicas que esperar
 - **Sistema de puntuación** clásico de Tetris (100 / 300 / 500 / 800 multiplicado por nivel).
 - **Niveles** que aumentan cada 10 líneas y aceleran la caída.
 - **Pausa** y **Game Over** con opción de reinicio.
+- **Modo claro / oscuro**: botón con iconos ☀️ / 🌙 junto al título. Inicia en modo oscuro y recuerda tu última elección (`localStorage`).
 
 ---
 
@@ -85,6 +86,12 @@ Después abre `http://localhost:8000` en el navegador.
 | `↓`       | Soft drop (bajar más rápido)      |
 | `Espacio` | Hard drop (caída instantánea)     |
 | `P`       | Pausar / reanudar                 |
+
+---
+
+## Tema claro / oscuro
+
+El botón con los iconos de sol y luna, junto al título, alterna entre ambos temas. El juego inicia en modo **oscuro** y guarda tu preferencia en `localStorage` (clave `tetris-theme`). Los colores se definen como variables CSS en `style.css` (`:root` para oscuro y `[data-theme="light"]` para claro); el canvas lee de ahí el color de la cuadrícula y se redibuja al instante, incluso en pausa o Game Over. No hay atajo de teclado para cambiar el tema.
 
 ---
 
