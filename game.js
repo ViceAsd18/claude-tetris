@@ -39,6 +39,11 @@ const overlay = document.getElementById('overlay');
 const overlayTitle = document.getElementById('overlay-title');
 const overlayScore = document.getElementById('overlay-score');
 const restartBtn = document.getElementById('restart-btn');
+const themeBtn = document.getElementById('theme-toggle');
+
+const THEME_KEY = 'tetris-theme';
+let gridColor = '#22222e';
+let blockEdge = 'transparent';
 
 let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
 
@@ -165,11 +170,16 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = 'rgba(255,255,255,0.12)';
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  if (blockEdge !== 'transparent') {
+    context.strokeStyle = blockEdge;
+    context.lineWidth = 1;
+    context.strokeRect(x * size + 1.5, y * size + 1.5, size - 3, size - 3);
+  }
   context.globalAlpha = 1;
 }
 
 function drawGrid() {
-  ctx.strokeStyle = '#22222e';
+  ctx.strokeStyle = gridColor;
   ctx.lineWidth = 0.5;
   for (let c = 1; c < COLS; c++) {
     ctx.beginPath();
@@ -256,6 +266,28 @@ function loop(ts) {
   animId = requestAnimationFrame(loop);
 }
 
+function setTheme(theme, save) {
+  if (theme !== 'light') theme = 'dark';
+  document.documentElement.dataset.theme = theme;
+  const light = theme === 'light';
+  themeBtn.setAttribute('aria-pressed', String(light));
+  themeBtn.setAttribute('aria-label', light ? 'Cambiar a modo oscuro' : 'Cambiar a modo claro');
+  const style = getComputedStyle(document.documentElement);
+  gridColor = style.getPropertyValue('--grid').trim();
+  blockEdge = style.getPropertyValue('--block-edge').trim();
+  if (save) {
+    try { localStorage.setItem(THEME_KEY, theme); } catch (e) { /* almacenamiento no disponible */ }
+  }
+  // Redibujar aunque el loop esté cancelado (pausa / game over)
+  if (current && next) { draw(); drawNext(); }
+}
+
+function loadTheme() {
+  let saved = null;
+  try { saved = localStorage.getItem(THEME_KEY); } catch (e) { /* ignorar */ }
+  setTheme(saved === 'light' ? 'light' : 'dark', false);
+}
+
 function init() {
   board = createBoard();
   score = 0;
@@ -301,4 +333,17 @@ document.addEventListener('keydown', e => {
 
 restartBtn.addEventListener('click', init);
 
+themeBtn.addEventListener('click', () => {
+  setTheme(document.documentElement.dataset.theme === 'light' ? 'dark' : 'light', true);
+  themeBtn.blur(); // evita que Space/Enter vuelvan a activar el botón
+});
+// Space/Enter con el botón enfocado no deben activarlo
+themeBtn.addEventListener('keydown', e => {
+  if (e.code === 'Space' || e.code === 'Enter') e.preventDefault();
+});
+themeBtn.addEventListener('keyup', e => {
+  if (e.code === 'Space' || e.code === 'Enter') e.preventDefault();
+});
+
+loadTheme();
 init();
