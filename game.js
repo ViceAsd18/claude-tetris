@@ -18,6 +18,7 @@ const COLORS = [
   '#4db6ac', // U - teal
   '#7986cb', // + - cruz (índigo)
   '#f06292', // 1 - single 1×1 (rosa)
+  '#ff5252', // B - bomba (rojo)
 ];
 
 const PIECES = [
@@ -34,11 +35,14 @@ const PIECES = [
   [[10,0,10],[10,10,10],[0,0,0]],             // U
   [[0,11,0],[11,11,11],[0,11,0]],             // + - cruz
   [[12]],                                      // 1×1 - recompensa tras Tetris
+  [[13]],                                      // B - bomba, cada BOMB_EVERY líneas
 ];
 
-// El pool aleatorio excluye el single (último): solo sale como recompensa
-const RANDOM_TYPES = PIECES.length - 2;
-const SINGLE_TYPE = PIECES.length - 1;
+// El pool aleatorio excluye las especiales: single (recompensa) y bomba
+const SINGLE_TYPE = 12;
+const BOMB_TYPE = 13;
+const RANDOM_TYPES = SINGLE_TYPE - 1;
+const BOMB_EVERY = 10;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -59,7 +63,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -112,6 +116,13 @@ function merge() {
         board[current.y + r][current.x + c] = current.shape[r][c];
 }
 
+// Bomba: vacía el área 3×3 centrada en su celda; sin gravedad ni puntos
+function explode() {
+  for (let r = current.y - 1; r <= current.y + 1; r++)
+    for (let c = current.x - 1; c <= current.x + 1; c++)
+      if (r >= 0 && r < ROWS && c >= 0 && c < COLS) board[r][c] = 0;
+}
+
 function clearLines() {
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
@@ -124,6 +135,7 @@ function clearLines() {
   }
   if (cleared === 4) rewardPending = true;
   if (cleared) {
+    if (Math.floor((lines + cleared) / BOMB_EVERY) > Math.floor(lines / BOMB_EVERY)) bombPending = true;
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
@@ -156,8 +168,12 @@ function softDrop() {
 }
 
 function lockPiece() {
-  merge();
-  clearLines();
+  if (current.type === BOMB_TYPE) {
+    explode();
+  } else {
+    merge();
+    clearLines();
+  }
   spawn();
 }
 
@@ -168,7 +184,8 @@ function spawn() {
     current = randomPiece(SINGLE_TYPE);
   } else {
     current = next;
-    next = randomPiece();
+    next = randomPiece(bombPending ? BOMB_TYPE : undefined);
+    bombPending = false;
   }
   if (collide(current.shape, current.x, current.y)) {
     endGame();
@@ -320,6 +337,7 @@ function init() {
   dropInterval = 1000;
   dropAccum = 0;
   rewardPending = false;
+  bombPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
