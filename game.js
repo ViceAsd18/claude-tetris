@@ -24,6 +24,7 @@ const COLORS = [
   '#e040fb', // T - tinte (magenta)
   '#ffffff', // * - comodín (arcoíris, ver drawBlock)
   '#40c4ff', // G - gravedad (azul claro)
+  '#b3e5fc', // C - congelar (hielo)
 ];
 
 const PIECES = [
@@ -46,6 +47,7 @@ const PIECES = [
   [[16]],                                      // T - tinte, cada TINT_EVERY líneas
   null,                                        // * - comodín: solo existe en el tablero
   [[18]],                                      // G - gravedad, cada GRAVITY_EVERY líneas
+  [[19]],                                      // C - congelar, cada FREEZE_EVERY líneas
 ];
 
 // El pool aleatorio excluye las especiales: single (recompensa), bomba y rayo
@@ -56,11 +58,14 @@ const LIGHTNING_V = 15;
 const TINT_TYPE = 16;
 const WILD_TYPE = 17; // celda comodín: solo existe en el tablero
 const GRAVITY_TYPE = 18;
+const FREEZE_TYPE = 19;
 const RANDOM_TYPES = SINGLE_TYPE - 1;
 const BOMB_EVERY = 10;
 const LIGHTNING_EVERY = 15;
 const TINT_EVERY = 12;
 const GRAVITY_EVERY = 20;
+const FREEZE_EVERY = 8;
+const FREEZE_MS = 5000;
 const WILD_BONUS = 20;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
@@ -82,7 +87,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending, tintPending, gravityPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending, tintPending, gravityPending, freezePending, freezeLeft;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -204,6 +209,7 @@ function clearLines() {
     if (Math.floor((lines + cleared) / LIGHTNING_EVERY) > Math.floor(lines / LIGHTNING_EVERY)) lightningPending = true;
     if (Math.floor((lines + cleared) / TINT_EVERY) > Math.floor(lines / TINT_EVERY)) tintPending = true;
     if (Math.floor((lines + cleared) / GRAVITY_EVERY) > Math.floor(lines / GRAVITY_EVERY)) gravityPending = true;
+    if (Math.floor((lines + cleared) / FREEZE_EVERY) > Math.floor(lines / FREEZE_EVERY)) freezePending = true;
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level + wilds * WILD_BONUS * level;
     level = Math.floor(lines / 10) + 1;
@@ -244,6 +250,8 @@ function lockPiece() {
     tint();
   } else if (current.type === GRAVITY_TYPE) {
     gravity();
+  } else if (current.type === FREEZE_TYPE) {
+    freezeLeft = FREEZE_MS;
   } else {
     merge();
     clearLines();
@@ -258,7 +266,7 @@ function spawn() {
     current = randomPiece(SINGLE_TYPE);
   } else {
     current = next;
-    // Prioridad bomba > rayo > tinte > gravedad; el resto queda pendiente si coinciden
+    // Prioridad bomba > rayo > tinte > gravedad > congelar; el resto queda pendiente si coinciden
     if (bombPending) {
       next = randomPiece(BOMB_TYPE);
       bombPending = false;
@@ -271,6 +279,9 @@ function spawn() {
     } else if (gravityPending) {
       next = randomPiece(GRAVITY_TYPE);
       gravityPending = false;
+    } else if (freezePending) {
+      next = randomPiece(FREEZE_TYPE);
+      freezePending = false;
     } else {
       next = randomPiece();
     }
@@ -317,6 +328,19 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
     context.closePath();
     context.fill();
   }
+  if (colorIndex === FREEZE_TYPE) {
+    // copo: tres líneas oscuras cruzadas
+    context.strokeStyle = 'rgba(0,0,0,0.5)';
+    context.lineWidth = 2;
+    const cx = x * size + size / 2, cy = y * size + size / 2, rad = size / 2 - 6;
+    context.beginPath();
+    for (let a = 0; a < 3; a++) {
+      const ang = a * Math.PI / 3;
+      context.moveTo(cx - Math.cos(ang) * rad, cy - Math.sin(ang) * rad);
+      context.lineTo(cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad);
+    }
+    context.stroke();
+  }
   if (blockEdge !== 'transparent') {
     context.strokeStyle = blockEdge;
     context.lineWidth = 1;
@@ -362,6 +386,16 @@ function draw() {
   for (let r = 0; r < current.shape.length; r++)
     for (let c = 0; c < current.shape[r].length; c++)
       drawBlock(ctx, current.x + c, current.y + r, current.shape[r][c], BLOCK);
+
+  // congelado: capa de hielo con cuenta atrás
+  if (freezeLeft > 0) {
+    ctx.fillStyle = 'rgba(129,212,250,0.18)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#b3e5fc';
+    ctx.font = 'bold 18px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(`❄ ${(freezeLeft / 1000).toFixed(1)}s`, canvas.width / 2, 26);
+  }
 }
 
 function drawNext() {
@@ -400,7 +434,8 @@ function togglePause() {
 function loop(ts) {
   const dt = ts - lastTime;
   lastTime = ts;
-  dropAccum += dt;
+  if (freezeLeft > 0) freezeLeft = Math.max(0, freezeLeft - dt);
+  else dropAccum += dt;
   if (dropAccum >= dropInterval) {
     dropAccum = 0;
     if (!collide(current.shape, current.x, current.y + 1)) {
@@ -450,6 +485,8 @@ function init() {
   lightningPending = false;
   tintPending = false;
   gravityPending = false;
+  freezePending = false;
+  freezeLeft = 0;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
