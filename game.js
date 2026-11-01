@@ -14,6 +14,7 @@ const COLORS = [
   '#90caf9', // J - azul pálido
   '#ffb74d', // L - orange
   '#b0bec5', // N - tuerca (gris metálico)
+  '#aed581', // Y - pentominó (verde lima)
   '#f06292', // 1 - single 1×1 (rosa)
 ];
 
@@ -27,7 +28,8 @@ const PIECES = [
   [[6,0,0],[6,6,6],[0,0,0]],                  // J
   [[0,0,7],[7,7,7],[0,0,0]],                  // L
   [[8,8,8],[8,0,8],[8,8,8]],                  // N - tuerca
-  [[9]],                                       // 1×1 - recompensa tras Tetris
+  [[0,9,0,0],[9,9,9,9],[0,0,0,0],[0,0,0,0]], // Y - pentominó
+  [[10]],                                      // 1×1 - recompensa tras Tetris
 ];
 
 // El pool aleatorio excluye el single (último): solo sale como recompensa
