@@ -23,6 +23,7 @@ const COLORS = [
   '#fff176', // R│ - rayo vertical
   '#e040fb', // T - tinte (magenta)
   '#ffffff', // * - comodín (arcoíris, ver drawBlock)
+  '#40c4ff', // G - gravedad (azul claro)
 ];
 
 const PIECES = [
@@ -43,6 +44,8 @@ const PIECES = [
   [[14]],                                      // R─ - rayo horizontal, cada LIGHTNING_EVERY líneas
   [[15]],                                      // R│ - rayo vertical
   [[16]],                                      // T - tinte, cada TINT_EVERY líneas
+  null,                                        // * - comodín: solo existe en el tablero
+  [[18]],                                      // G - gravedad, cada GRAVITY_EVERY líneas
 ];
 
 // El pool aleatorio excluye las especiales: single (recompensa), bomba y rayo
@@ -52,10 +55,12 @@ const LIGHTNING_H = 14;
 const LIGHTNING_V = 15;
 const TINT_TYPE = 16;
 const WILD_TYPE = 17; // celda comodín: solo existe en el tablero
+const GRAVITY_TYPE = 18;
 const RANDOM_TYPES = SINGLE_TYPE - 1;
 const BOMB_EVERY = 10;
 const LIGHTNING_EVERY = 15;
 const TINT_EVERY = 12;
+const GRAVITY_EVERY = 20;
 const WILD_BONUS = 20;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
@@ -77,7 +82,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending, tintPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending, tintPending, gravityPending;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -167,6 +172,20 @@ function tint() {
       if (board[r][c] === target) board[r][c] = WILD_TYPE;
 }
 
+// Gravedad: cada columna cae hasta el fondo, eliminando huecos. Puede completar filas, que puntúan normal
+function gravity() {
+  for (let c = 0; c < COLS; c++) {
+    let write = ROWS - 1;
+    for (let r = ROWS - 1; r >= 0; r--) {
+      if (!board[r][c]) continue;
+      const v = board[r][c];
+      board[r][c] = 0;
+      board[write--][c] = v;
+    }
+  }
+  clearLines();
+}
+
 function clearLines() {
   let cleared = 0;
   let wilds = 0;
@@ -184,6 +203,7 @@ function clearLines() {
     if (Math.floor((lines + cleared) / BOMB_EVERY) > Math.floor(lines / BOMB_EVERY)) bombPending = true;
     if (Math.floor((lines + cleared) / LIGHTNING_EVERY) > Math.floor(lines / LIGHTNING_EVERY)) lightningPending = true;
     if (Math.floor((lines + cleared) / TINT_EVERY) > Math.floor(lines / TINT_EVERY)) tintPending = true;
+    if (Math.floor((lines + cleared) / GRAVITY_EVERY) > Math.floor(lines / GRAVITY_EVERY)) gravityPending = true;
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level + wilds * WILD_BONUS * level;
     level = Math.floor(lines / 10) + 1;
@@ -222,6 +242,8 @@ function lockPiece() {
     strike();
   } else if (current.type === TINT_TYPE) {
     tint();
+  } else if (current.type === GRAVITY_TYPE) {
+    gravity();
   } else {
     merge();
     clearLines();
@@ -236,7 +258,7 @@ function spawn() {
     current = randomPiece(SINGLE_TYPE);
   } else {
     current = next;
-    // Prioridad bomba > rayo > tinte; el resto queda pendiente si coinciden
+    // Prioridad bomba > rayo > tinte > gravedad; el resto queda pendiente si coinciden
     if (bombPending) {
       next = randomPiece(BOMB_TYPE);
       bombPending = false;
@@ -246,6 +268,9 @@ function spawn() {
     } else if (tintPending) {
       next = randomPiece(TINT_TYPE);
       tintPending = false;
+    } else if (gravityPending) {
+      next = randomPiece(GRAVITY_TYPE);
+      gravityPending = false;
     } else {
       next = randomPiece();
     }
@@ -281,6 +306,16 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
     context.fillStyle = 'rgba(0,0,0,0.5)';
     if (colorIndex === LIGHTNING_H) context.fillRect(x * size + 4, y * size + size / 2 - 2, size - 8, 4);
     else context.fillRect(x * size + size / 2 - 2, y * size + 4, 4, size - 8);
+  }
+  if (colorIndex === GRAVITY_TYPE) {
+    // triángulo oscuro apuntando hacia abajo
+    context.fillStyle = 'rgba(0,0,0,0.5)';
+    context.beginPath();
+    context.moveTo(x * size + 7, y * size + 9);
+    context.lineTo(x * size + size - 7, y * size + 9);
+    context.lineTo(x * size + size / 2, y * size + size - 7);
+    context.closePath();
+    context.fill();
   }
   if (blockEdge !== 'transparent') {
     context.strokeStyle = blockEdge;
@@ -414,6 +449,7 @@ function init() {
   bombPending = false;
   lightningPending = false;
   tintPending = false;
+  gravityPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
