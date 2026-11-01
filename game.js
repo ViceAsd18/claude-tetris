@@ -59,7 +59,9 @@ const TINT_TYPE = 16;
 const WILD_TYPE = 17; // celda comodín: solo existe en el tablero
 const GRAVITY_TYPE = 18;
 const FREEZE_TYPE = 19;
-const RANDOM_TYPES = SINGLE_TYPE - 1;
+// Peso de cada tipo en el pool aleatorio: clásicas comunes, especiales (8-11) ocasionales
+const PIECE_WEIGHTS = [0, 6, 6, 6, 6, 6, 6, 6, 1, 1, 1, 1];
+const WEIGHT_TOTAL = PIECE_WEIGHTS.reduce((a, b) => a + b, 0);
 const BOMB_EVERY = 10;
 const LIGHTNING_EVERY = 15;
 const TINT_EVERY = 12;
@@ -94,7 +96,12 @@ function createBoard() {
 }
 
 function randomPiece(forcedType) {
-  const type = forcedType || Math.floor(Math.random() * RANDOM_TYPES) + 1;
+  let type = forcedType;
+  if (!type) {
+    let roll = Math.random() * WEIGHT_TOTAL;
+    type = 1;
+    while (type < PIECE_WEIGHTS.length - 1 && (roll -= PIECE_WEIGHTS[type]) >= 0) type++;
+  }
   const shape = PIECES[type].map(row => [...row]);
   return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0 };
 }
