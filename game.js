@@ -14,6 +14,7 @@ const COLORS = [
   '#90caf9', // J - azul pálido
   '#ffb74d', // L - orange
   '#b0bec5', // N - tuerca (gris metálico)
+  '#f06292', // 1 - single 1×1 (rosa)
 ];
 
 const PIECES = [
@@ -26,7 +27,12 @@ const PIECES = [
   [[6,0,0],[6,6,6],[0,0,0]],                  // J
   [[0,0,7],[7,7,7],[0,0,0]],                  // L
   [[8,8,8],[8,0,8],[8,8,8]],                  // N - tuerca
+  [[9]],                                       // 1×1 - recompensa tras Tetris
 ];
+
+// El pool aleatorio excluye el single (último): solo sale como recompensa
+const RANDOM_TYPES = PIECES.length - 2;
+const SINGLE_TYPE = PIECES.length - 1;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -47,14 +53,14 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
 }
 
-function randomPiece() {
-  const type = Math.floor(Math.random() * (PIECES.length - 1)) + 1;
+function randomPiece(forcedType) {
+  const type = forcedType || Math.floor(Math.random() * RANDOM_TYPES) + 1;
   const shape = PIECES[type].map(row => [...row]);
   return { type, shape, x: Math.floor(COLS / 2) - Math.floor(shape[0].length / 2), y: 0 };
 }
@@ -110,6 +116,7 @@ function clearLines() {
       r++;
     }
   }
+  if (cleared === 4) rewardPending = true;
   if (cleared) {
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
@@ -149,8 +156,14 @@ function lockPiece() {
 }
 
 function spawn() {
-  current = next;
-  next = randomPiece();
+  if (rewardPending) {
+    // Recompensa: el single pasa delante y `next` se conserva
+    rewardPending = false;
+    current = randomPiece(SINGLE_TYPE);
+  } else {
+    current = next;
+    next = randomPiece();
+  }
   if (collide(current.shape, current.x, current.y)) {
     endGame();
   }
@@ -300,6 +313,7 @@ function init() {
   gameOver = false;
   dropInterval = 1000;
   dropAccum = 0;
+  rewardPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
