@@ -19,6 +19,8 @@ const COLORS = [
   '#7986cb', // + - cruz (índigo)
   '#f06292', // 1 - single 1×1 (rosa)
   '#ff5252', // B - bomba (rojo)
+  '#fff176', // R─ - rayo horizontal (amarillo eléctrico)
+  '#fff176', // R│ - rayo vertical
 ];
 
 const PIECES = [
@@ -36,13 +38,18 @@ const PIECES = [
   [[0,11,0],[11,11,11],[0,11,0]],             // + - cruz
   [[12]],                                      // 1×1 - recompensa tras Tetris
   [[13]],                                      // B - bomba, cada BOMB_EVERY líneas
+  [[14]],                                      // R─ - rayo horizontal, cada LIGHTNING_EVERY líneas
+  [[15]],                                      // R│ - rayo vertical
 ];
 
-// El pool aleatorio excluye las especiales: single (recompensa) y bomba
+// El pool aleatorio excluye las especiales: single (recompensa), bomba y rayo
 const SINGLE_TYPE = 12;
 const BOMB_TYPE = 13;
+const LIGHTNING_H = 14;
+const LIGHTNING_V = 15;
 const RANDOM_TYPES = SINGLE_TYPE - 1;
 const BOMB_EVERY = 10;
+const LIGHTNING_EVERY = 15;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -63,7 +70,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -97,7 +104,17 @@ function rotateCW(shape) {
   return result;
 }
 
+function isLightning(type) {
+  return type === LIGHTNING_H || type === LIGHTNING_V;
+}
+
 function tryRotate() {
+  if (isLightning(current.type)) {
+    // 1×1: solo alterna la orientación
+    current.type = current.type === LIGHTNING_H ? LIGHTNING_V : LIGHTNING_H;
+    current.shape = [[current.type]];
+    return;
+  }
   const rotated = rotateCW(current.shape);
   const kicks = [0, -1, 1, -2, 2];
   for (const kick of kicks) {
@@ -123,6 +140,16 @@ function explode() {
       if (r >= 0 && r < ROWS && c >= 0 && c < COLS) board[r][c] = 0;
 }
 
+// Rayo: horizontal elimina su fila (las de arriba bajan); vertical vacía su columna. Sin puntos
+function strike() {
+  if (current.type === LIGHTNING_H) {
+    board.splice(current.y, 1);
+    board.unshift(new Array(COLS).fill(0));
+  } else {
+    for (let r = 0; r < ROWS; r++) board[r][current.x] = 0;
+  }
+}
+
 function clearLines() {
   let cleared = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
@@ -136,6 +163,7 @@ function clearLines() {
   if (cleared === 4) rewardPending = true;
   if (cleared) {
     if (Math.floor((lines + cleared) / BOMB_EVERY) > Math.floor(lines / BOMB_EVERY)) bombPending = true;
+    if (Math.floor((lines + cleared) / LIGHTNING_EVERY) > Math.floor(lines / LIGHTNING_EVERY)) lightningPending = true;
     lines += cleared;
     score += (LINE_SCORES[cleared] || 0) * level;
     level = Math.floor(lines / 10) + 1;
@@ -170,6 +198,8 @@ function softDrop() {
 function lockPiece() {
   if (current.type === BOMB_TYPE) {
     explode();
+  } else if (isLightning(current.type)) {
+    strike();
   } else {
     merge();
     clearLines();
@@ -184,8 +214,16 @@ function spawn() {
     current = randomPiece(SINGLE_TYPE);
   } else {
     current = next;
-    next = randomPiece(bombPending ? BOMB_TYPE : undefined);
-    bombPending = false;
+    // La bomba tiene prioridad; el rayo queda pendiente si coinciden
+    if (bombPending) {
+      next = randomPiece(BOMB_TYPE);
+      bombPending = false;
+    } else if (lightningPending) {
+      next = randomPiece(LIGHTNING_H);
+      lightningPending = false;
+    } else {
+      next = randomPiece();
+    }
   }
   if (collide(current.shape, current.x, current.y)) {
     endGame();
@@ -208,6 +246,12 @@ function drawBlock(context, x, y, colorIndex, size, alpha) {
   // highlight
   context.fillStyle = 'rgba(255,255,255,0.12)';
   context.fillRect(x * size + 1, y * size + 1, size - 2, 4);
+  if (isLightning(colorIndex)) {
+    // barra oscura que indica la orientación
+    context.fillStyle = 'rgba(0,0,0,0.5)';
+    if (colorIndex === LIGHTNING_H) context.fillRect(x * size + 4, y * size + size / 2 - 2, size - 8, 4);
+    else context.fillRect(x * size + size / 2 - 2, y * size + 4, 4, size - 8);
+  }
   if (blockEdge !== 'transparent') {
     context.strokeStyle = blockEdge;
     context.lineWidth = 1;
@@ -338,6 +382,7 @@ function init() {
   dropAccum = 0;
   rewardPending = false;
   bombPending = false;
+  lightningPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
