@@ -21,6 +21,8 @@ const COLORS = [
   '#ff5252', // B - bomba (rojo)
   '#fff176', // R─ - rayo horizontal (amarillo eléctrico)
   '#fff176', // R│ - rayo vertical
+  '#e040fb', // T - tinte (magenta)
+  '#ffffff', // * - comodín (arcoíris, ver drawBlock)
 ];
 
 const PIECES = [
@@ -40,6 +42,7 @@ const PIECES = [
   [[13]],                                      // B - bomba, cada BOMB_EVERY líneas
   [[14]],                                      // R─ - rayo horizontal, cada LIGHTNING_EVERY líneas
   [[15]],                                      // R│ - rayo vertical
+  [[16]],                                      // T - tinte, cada TINT_EVERY líneas
 ];
 
 // El pool aleatorio excluye las especiales: single (recompensa), bomba y rayo
@@ -47,9 +50,13 @@ const SINGLE_TYPE = 12;
 const BOMB_TYPE = 13;
 const LIGHTNING_H = 14;
 const LIGHTNING_V = 15;
+const TINT_TYPE = 16;
+const WILD_TYPE = 17; // celda comodín: solo existe en el tablero
 const RANDOM_TYPES = SINGLE_TYPE - 1;
 const BOMB_EVERY = 10;
 const LIGHTNING_EVERY = 15;
+const TINT_EVERY = 12;
+const WILD_BONUS = 20;
 
 const LINE_SCORES = [0, 100, 300, 500, 800];
 
@@ -70,7 +77,7 @@ const THEME_KEY = 'tetris-theme';
 let gridColor = '#22222e';
 let blockEdge = 'transparent';
 
-let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending;
+let board, current, next, score, lines, level, paused, gameOver, lastTime, dropAccum, dropInterval, animId, rewardPending, bombPending, lightningPending, tintPending;
 
 function createBoard() {
   return Array.from({ length: ROWS }, () => new Array(COLS).fill(0));
@@ -150,10 +157,22 @@ function strike() {
   }
 }
 
+// Tinte: todas las celdas del color sobre el que cae pasan a comodín. Sin puntos
+function tint() {
+  const below = current.y + 1;
+  const target = below < ROWS ? board[below][current.x] : 0;
+  if (!target || target === WILD_TYPE) return;
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (board[r][c] === target) board[r][c] = WILD_TYPE;
+}
+
 function clearLines() {
   let cleared = 0;
+  let wilds = 0;
   for (let r = ROWS - 1; r >= 0; r--) {
     if (board[r].every(v => v !== 0)) {
+      wilds += board[r].filter(v => v === WILD_TYPE).length;
       board.splice(r, 1);
       board.unshift(new Array(COLS).fill(0));
       cleared++;
@@ -164,8 +183,9 @@ function clearLines() {
   if (cleared) {
     if (Math.floor((lines + cleared) / BOMB_EVERY) > Math.floor(lines / BOMB_EVERY)) bombPending = true;
     if (Math.floor((lines + cleared) / LIGHTNING_EVERY) > Math.floor(lines / LIGHTNING_EVERY)) lightningPending = true;
+    if (Math.floor((lines + cleared) / TINT_EVERY) > Math.floor(lines / TINT_EVERY)) tintPending = true;
     lines += cleared;
-    score += (LINE_SCORES[cleared] || 0) * level;
+    score += (LINE_SCORES[cleared] || 0) * level + wilds * WILD_BONUS * level;
     level = Math.floor(lines / 10) + 1;
     dropInterval = Math.max(100, 1000 - (level - 1) * 90);
     updateHUD();
@@ -200,6 +220,8 @@ function lockPiece() {
     explode();
   } else if (isLightning(current.type)) {
     strike();
+  } else if (current.type === TINT_TYPE) {
+    tint();
   } else {
     merge();
     clearLines();
@@ -214,13 +236,16 @@ function spawn() {
     current = randomPiece(SINGLE_TYPE);
   } else {
     current = next;
-    // La bomba tiene prioridad; el rayo queda pendiente si coinciden
+    // Prioridad bomba > rayo > tinte; el resto queda pendiente si coinciden
     if (bombPending) {
       next = randomPiece(BOMB_TYPE);
       bombPending = false;
     } else if (lightningPending) {
       next = randomPiece(LIGHTNING_H);
       lightningPending = false;
+    } else if (tintPending) {
+      next = randomPiece(TINT_TYPE);
+      tintPending = false;
     } else {
       next = randomPiece();
     }
@@ -239,7 +264,12 @@ function updateHUD() {
 
 function drawBlock(context, x, y, colorIndex, size, alpha) {
   if (!colorIndex) return;
-  const color = COLORS[colorIndex];
+  let color = COLORS[colorIndex];
+  if (colorIndex === WILD_TYPE) {
+    const g = context.createLinearGradient(x * size, y * size, (x + 1) * size, (y + 1) * size);
+    ['#ff5252', '#ffd54f', '#81c784', '#4dd0e1', '#ba68c8'].forEach((c, i) => g.addColorStop(i / 4, c));
+    color = g;
+  }
   context.globalAlpha = alpha ?? 1;
   context.fillStyle = color;
   context.fillRect(x * size + 1, y * size + 1, size - 2, size - 2);
@@ -383,6 +413,7 @@ function init() {
   rewardPending = false;
   bombPending = false;
   lightningPending = false;
+  tintPending = false;
   lastTime = performance.now();
   next = randomPiece();
   spawn();
